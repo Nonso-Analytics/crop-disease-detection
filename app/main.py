@@ -15,7 +15,7 @@ from PIL import Image
 import io
 import onnxruntime as ort
 
-from utils import preprocess_image, load_class_names
+from .utils import preprocess_image, load_class_names
 
 
 # Initialize FastAPI app
@@ -28,7 +28,7 @@ app = FastAPI(
 # Global variables for model and classes
 MODEL_PATH = os.getenv("MODEL_PATH", "models/crop_disease_model.onnx")
 CLASSES_PATH = os.getenv("CLASSES_PATH", "models/classes.json")
-INPUT_SIZE = 224
+INPUT_SIZE = 224  # Changed to int for consistency
 
 # Load model and classes at startup
 ort_session = None
@@ -120,11 +120,14 @@ async def predict(file: UploadFile = File(...)):
         # Preprocess for model
         input_tensor = preprocess_image(image, INPUT_SIZE)
         
-        # Run inference
-        outputs = ort_session.run(None, {'input': input_tensor})
-        logits = outputs[0][0]
+        # Get input name dynamically
+        input_name = ort_session.get_inputs()[0].name
         
-        # Get probabilities
+        # Run inference
+        outputs = ort_session.run(None, {input_name: input_tensor})
+        logits = outputs[0][0]  # Shape: (num_classes,)
+        
+        # Get probabilities using softmax
         exp_logits = np.exp(logits - np.max(logits))
         probabilities = exp_logits / exp_logits.sum()
         
@@ -153,6 +156,10 @@ async def predict(file: UploadFile = File(...)):
         }
         
     except Exception as e:
+        # More detailed error logging
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Prediction error: {error_details}")
         raise HTTPException(
             status_code=500,
             detail=f"Prediction error: {str(e)}"
